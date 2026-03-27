@@ -31,7 +31,7 @@ enum TrueShuffleHookInstaller {
             writeDebugLog("True Shuffle: failed to enumerate Objective-C classes")
             return
         }
-        defer { free(classes) }
+        defer { free(UnsafeMutableRawPointer(classes)) }
         
         for index in 0 ..< Int(classCount) {
             let cls = classes[index]
