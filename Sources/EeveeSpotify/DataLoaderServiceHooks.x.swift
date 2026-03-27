@@ -21,8 +21,12 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
     func shouldBlock(_ url: URL) -> Bool {
         let elapsed = Date().timeIntervalSince(tweakInitTime)
         
+        // Diagnostic logging for all URLs
+        writeDebugLog("[DEBUG] Requesting URL: \(url.absoluteString)")
+
         // Block shuffle recommendation requests if True Shuffle is enabled
         if url.isShuffle && UserDefaults.trueShuffleEnabled {
+            writeDebugLog("[DEBUG] True Shuffle: Blocking shuffle request: \(url.absoluteString)")
             return true
         }
 
