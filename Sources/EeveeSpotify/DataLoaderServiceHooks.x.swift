@@ -21,6 +21,11 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
     func shouldBlock(_ url: URL) -> Bool {
         let elapsed = Date().timeIntervalSince(tweakInitTime)
         
+        // Block shuffle recommendation requests if True Shuffle is enabled
+        if url.isShuffle && UserDefaults.trueShuffleEnabled {
+            return true
+        }
+
         // Always block explicit session destroy/token delete
         if url.isDeleteToken || url.isSessionInvalidation || url.path.contains("session/purge") || url.path.contains("token/revoke") {
             return true
@@ -83,6 +88,9 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         } else if url.path.contains("pses/screenconfig") {
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
         } else if url.path.contains("bootstrap/v1/bootstrap") {
+            respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
+        } else if url.isShuffle {
+            // Return empty shuffle response to bypass weighted recommendations
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
         }
         orig.URLSession(session, task: task, didCompleteWithError: nil)
