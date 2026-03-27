@@ -9,6 +9,10 @@ extension URL {
         self.path.contains("GetPlanOverview")
     }
     
+    var isShuffle: Bool {
+        self.path.contains("v1/shuffle")
+    }
+    
     var isPremiumPlanRow: Bool {
         self.path.contains("v1/GetPremiumPlanRow")
     }
