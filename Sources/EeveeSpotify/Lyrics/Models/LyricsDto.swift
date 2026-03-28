@@ -10,7 +10,7 @@ struct LyricsDto {
         var lyricsData = LyricsData.with {
             $0.timeSynchronized = timeSynced
             $0.restriction = .unrestricted
-            $0.providedBy = "\(source) (EeveeSpotify)"
+            $0.providedBy = "\(UserDefaults.lyricsSource.description) (EeveeSpotify)"
         }
         
         let shouldRomanize = UserDefaults.lyricsOptions.romanization
@@ -52,3 +52,4 @@ struct LyricsDto {
         return lyricsData
     }
 }
+
