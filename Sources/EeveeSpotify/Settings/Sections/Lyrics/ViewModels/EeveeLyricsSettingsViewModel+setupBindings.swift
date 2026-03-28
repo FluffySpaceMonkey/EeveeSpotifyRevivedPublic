@@ -67,8 +67,7 @@ extension EeveeLyricsSettingsViewModel {
                 
                 if newSource == .musixmatch && self.musixmatchToken.isEmpty {
                     self.musixmatchTokenInputAlertPublisher.send(true)
-                    // We don't return here; we let it persist so the picker doesn't jump back immediately.
-                    // The alert will handle forcing it back if the user cancels.
+                    return
                 }
                 
                 if newSource == .lrclib {
