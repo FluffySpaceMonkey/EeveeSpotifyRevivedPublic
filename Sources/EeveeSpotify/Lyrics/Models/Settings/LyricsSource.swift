@@ -6,30 +6,31 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
     case musixmatch
     case petit
     case notReplaced
-
+    
     // All sources enabled now that we have reliable metadata fetching
     public static var allCases: [LyricsSource] {
-        return [.genius, .lrclib, .musixmatch, .petit]
+        return [.musixmatch]
     }
 
     // swift 5.8 compatible
     var description: String {
-        switch self {
-        case .genius:
-            return "Genius"
-        case .lrclib:
-            return "LRCLIB"
-        case .musixmatch:
-            return "Musixmatch"
-        case .petit:
-            return "PetitLyrics"
-        case .notReplaced:
-            return "Spotify"
-        }
+    switch self {
+    case .genius:
+        return "Genius"
+    case .lrclib:
+        return "LRCLIB"
+    case .musixmatch:
+        return "Musixmatch"
+    case .petit:
+        return "PetitLyrics"
+    case .notReplaced:
+        return "Spotify"
+    }
     }
 
+    
     var isReplacingLyrics: Bool { self != .notReplaced }
-
+    
     static var defaultSource: LyricsSource {
         .musixmatch
     }
