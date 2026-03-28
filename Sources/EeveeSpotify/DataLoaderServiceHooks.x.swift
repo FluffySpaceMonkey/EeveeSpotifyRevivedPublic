@@ -21,13 +21,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
     func shouldBlock(_ url: URL) -> Bool {
         let elapsed = Date().timeIntervalSince(tweakInitTime)
         
-        // Block shuffle recommendation requests if True Shuffle is enabled
-        // This is the safest way to implement True Shuffle as it doesn't touch internal memory.
-        if url.isShuffle && UserDefaults.trueShuffleEnabled {
-            writeDebugLog("[DEBUG] True Shuffle: Blocking shuffle request: \(url.absoluteString)")
-            return true
-        }
-
         // Always block explicit session destroy/token delete
         if url.isDeleteToken || url.isSessionInvalidation || url.path.contains("session/purge") || url.path.contains("token/revoke") {
             return true
@@ -89,9 +82,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
         } else if url.path.contains("bootstrap/v1/bootstrap") {
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
-        } else if url.isShuffle {
-            // Return empty shuffle response to bypass weighted recommendations
-            respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
         }
         orig.URLSession(session, task: task, didCompleteWithError: nil)
     }
@@ -108,7 +98,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
            auth.hasPrefix("Bearer ") {
             spotifyAccessToken = String(auth.dropFirst(7))
         }
-
+	
         guard let url = task.currentRequest?.url else {
             orig.URLSession(session, task: task, didCompleteWithError: error)
             return
