@@ -26,8 +26,6 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
         return "PetitLyrics"
     case .notReplaced:
         return "Spotify"
-    case .netease:
-        return "NetEase Cloud Music"
     }
     }
 
