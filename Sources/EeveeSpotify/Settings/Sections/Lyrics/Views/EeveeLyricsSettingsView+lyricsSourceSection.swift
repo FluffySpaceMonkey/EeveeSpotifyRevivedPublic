@@ -6,6 +6,8 @@ extension EeveeLyricsSettingsView {
 
         text.append("\n\n")
         text.append("petitlyrics_description".localized)
+        text.append("\n\n")
+        text.append("netease_description".localized)
         
         text.append("\n\n")
         text.append("lyrics_additional_info".localized)
