@@ -21,8 +21,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
     func shouldBlock(_ url: URL) -> Bool {
         let elapsed = Date().timeIntervalSince(tweakInitTime)
         
-        // Always block explicit session destroy/token delete
-        if url.isDeleteToken || url.isSessionInvalidation || url.path.contains("session/purge") || url.path.contains("token/revoke") {
+        // Always block explicit session destroy/token delete or ad-related requests
+        if url.isDeleteToken || url.isSessionInvalidation || url.path.contains("session/purge") || url.path.contains("token/revoke") || url.isAdRelated {
             return true
         }
 
@@ -82,6 +82,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
         } else if url.path.contains("bootstrap/v1/bootstrap") {
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
+        } else if url.isAdRelated {
+            respondWithCustomData(Data(), task: task, session: session)
         }
         orig.URLSession(session, task: task, didCompleteWithError: nil)
     }
