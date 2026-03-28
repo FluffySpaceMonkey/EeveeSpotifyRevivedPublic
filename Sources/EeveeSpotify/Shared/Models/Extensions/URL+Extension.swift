@@ -14,7 +14,9 @@ extension URL {
         self.path.contains("recommendations") ||
         self.path.contains("context-resolve") ||
         self.path.contains("next-tracks") ||
-        self.path.contains("weighted-shuffle")
+        self.path.contains("weighted-shuffle") ||
+        self.path.contains("v1/tracks") ||
+        self.path.contains("v1/playlist")
     }
     
     var isPremiumPlanRow: Bool {
