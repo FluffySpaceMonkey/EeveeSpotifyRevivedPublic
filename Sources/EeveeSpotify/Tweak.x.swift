@@ -144,6 +144,9 @@ struct EeveeSpotify: Tweak {
         // For 9.1.x, activate premium patching and lyrics
         if EeveeSpotify.hookTarget == .v91 {
             
+            // True Shuffle
+            TrueShuffleHookInstaller.installIfEnabled()
+            
             // Premium patching
             if UserDefaults.patchType.isPatching {
                 BasePremiumPatchingGroup().activate()
@@ -175,6 +178,9 @@ struct EeveeSpotify: Tweak {
         if UserDefaults.patchType.isPatching {
             activatePremiumPatchingGroup()
         }
+        
+        // True Shuffle
+        TrueShuffleHookInstaller.installIfEnabled()
         
         if UserDefaults.lyricsSource.isReplacingLyrics {
             BaseLyricsGroup().activate()
