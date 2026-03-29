@@ -10,7 +10,10 @@ class HubsAdBlocker: ClassHook<NSObject> {
     private func shouldStripComponent(_ component: [String: Any]) -> Bool {
         // Check ID
         if let id = component["id"] as? String {
-            let adKeywords = ["ad", "sponsored", "upsell", "campaign", "promoted", "premium-upsell", "merch", "ticket"]
+            let adKeywords = [
+                "ad", "sponsored", "upsell", "campaign", "promoted", "premium-upsell", 
+                "merch", "ticket", "billboard", "banner", "interstitial", "overlay", "popup"
+            ]
             for keyword in adKeywords {
                 if id.localizedCaseInsensitiveContains(keyword) {
                     return true
@@ -27,15 +30,21 @@ class HubsAdBlocker: ClassHook<NSObject> {
             
             // Check for common ad/upsell keys in metadata dictionary
             let metadataKeys = metadata.keys.map { $0.lowercased() }
-            if metadataKeys.contains(where: { $0.contains("ad-") || $0.contains("upsell") || $0.contains("campaign") }) {
+            if metadataKeys.contains(where: { 
+                $0.contains("ad-") || $0.contains("upsell") || $0.contains("campaign") || 
+                $0.contains("promoted") || $0.contains("sponsored") || $0.contains("billboard")
+            }) {
                 return true
             }
         }
         
         // Check Logging Metadata (often contains ad identifiers)
         if let logging = component["logging"] as? [String: Any] {
-            if let type = logging["type"] as? String, type.localizedCaseInsensitiveContains("ad") {
-                return true
+            if let type = logging["type"] as? String {
+                let lowerType = type.lowercased()
+                if lowerType.contains("ad") || lowerType.contains("sponsored") || lowerType.contains("promoted") {
+                    return true
+                }
             }
         }
 
