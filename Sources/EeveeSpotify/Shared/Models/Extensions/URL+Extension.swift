@@ -75,6 +75,12 @@ extension URL {
                path.contains("/campaign/") ||
                path.contains("/billboard/") ||
                path.contains("/banner/") ||
+               path.contains("/interstitial/") ||
+               path.contains("/overlay/") ||
+               path.contains("/popup/") ||
+               path.contains("/pop-up/") ||
+               path.contains("/search-ad/") ||
+               path.contains("/home-ad/") ||
                path.contains("doubleclick") ||
                path.contains("googlesyndication")
     }
