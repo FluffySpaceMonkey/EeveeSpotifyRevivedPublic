@@ -1,70 +1,60 @@
 import Foundation
 
 extension URL {
-    var isLyrics: Bool {
-        self.path.contains("color-lyrics/v2")
-    }
-    
-    var isPlanOverview: Bool {
-        self.path.contains("GetPlanOverview")
-    }
-    
-    var isShuffle: Bool {
-        self.path.contains("shuffle")
-    }
-    
-    var isPremiumPlanRow: Bool {
-        self.path.contains("v1/GetPremiumPlanRow")
-    }
-    
-    var isPremiumBadge: Bool {
-        self.path.contains("GetYourPremiumBadge")
-    }
-
-    var isOpenSpotifySafariExtension: Bool {
-        self.host == "eevee"
-    }
-    
-    var isCustomize: Bool {
-        self.path.contains("v1/customize")
-    }
-    
-    var isBootstrap: Bool {
-        self.path.contains("v1/bootstrap")
-    }
-
-    // Blocked endpoint matchers (session protection)
-
     var isDeleteToken: Bool {
-        self.path.contains("DeleteToken")
+        self.path.contains("login5") && self.path.contains("delete")
     }
-
+    var isLyrics: Bool {
+        self.path.contains("color-lyrics") || self.path.contains("lyrics")
+    }
+    var isCustomize: Bool {
+        self.path.contains("user-customization-service") && self.path.contains("customize")
+    }
+    var isPremiumPlanRow: Bool {
+        self.path.contains("premium-plan-row")
+    }
+    var isPremiumBadge: Bool {
+        self.path.contains("premium-badge")
+    }
+    var isPlanOverview: Bool {
+        self.path.contains("plan-overview")
+    }
     var isAccountValidate: Bool {
-        self.path.contains("signup/public")
+        self.path.contains("melody/v1/check_eligibility") ||
+        (self.path.contains("account") && self.path.contains("validate"))
     }
-
     var isOndemandSelector: Bool {
-        self.path.contains("select-ondemand-set")
+        self.path.contains("ondemand-selector")
     }
-
     var isTrialsFacade: Bool {
-        self.path.contains("trials-facade/start-trial")
+        self.path.contains("trials-facade")
     }
-
     var isPremiumMarketing: Bool {
-        self.path.contains("premium-marketing/upsellOffer")
+        self.path.contains("premium-marketing")
     }
-
     var isPendragonFetchMessageList: Bool {
         self.path.contains("pendragon") && self.path.contains("FetchMessageList")
     }
-
     var isPushkaTokens: Bool {
         self.path.contains("pushka-tokens")
     }
 
     // MARK: - Ad-related URL detection
+    //
     // Covers Spotify's own ad delivery infrastructure plus third-party ad networks.
+    //
+    // Confirmed by binary analysis of Spotify 9.1.32 decrypted IPA:
+    //   - Esperanto gRPC service: spotify.ads.esperanto.proto.*
+    //     Paths: /.spotify.ads.esperanto.proto.TriggerSlotRequest
+    //            /.spotify.ads.esperanto.proto.PrepareSlotRequest
+    //            /.spotify.ads.esperanto.proto.CreateSlotResponse
+    //            /.spotify.ads.esperanto.proto.PostEventV2Request
+    //            /.spotify.ads.esperanto.proto.SubInStreamRequest
+    //            /.spotify.ads.esperanto.proto.UpdateSlotResponse
+    //            /.spotify.ads.esperanto.proto.AddPlaytimeRequest
+    //   - Brand ads: spotify.ads.brandads.v1.EmbeddedAd / EmbeddedAdMetadata
+    //   - Browse ads: spotify.ads.browseads.v2.BrowseAd / BrowseAdMetadata
+    //   - Casita proto ad types: ImageBrandAd, VideoBrandAd, PromotionV1/V3
     var isAdRelated: Bool {
         let path = self.path.lowercased()
         let host = (self.host ?? "").lowercased()
@@ -82,6 +72,14 @@ extension URL {
             "demdex.net",
             "ads.spotify.com",
             "adserver.spotify.com",
+            "pubads.g.doubleclick.net",
+            "securepubads.g.doubleclick.net",
+            "pagead2.googlesyndication.com",
+            "tpc.googlesyndication.com",
+            "cm.g.doubleclick.net",
+            "stats.g.doubleclick.net",
+            "ad.doubleclick.net",
+            "googleads.g.doubleclick.net",
         ]
         for adHost in adHosts {
             if host == adHost || host.hasSuffix("." + adHost) {
@@ -89,9 +87,14 @@ extension URL {
             }
         }
 
+        // ── Spotify Esperanto ad service (confirmed in binary) ────────────────────
+        // The Esperanto service delivers in-stream and display ad slots via gRPC.
+        // The gRPC method paths contain "spotify.ads.esperanto.proto".
+        if fullURL.contains("spotify.ads.esperanto.proto") {
+            return true
+        }
+
         // ── Spotify spclient ad-delivery paths ────────────────────────────────────
-        // spclient.wg.spotify.com is the main Spotify API gateway.
-        // Ad-specific sub-paths on it must be blocked while leaving other API calls intact.
         if host.contains("spclient") {
             let spAdPaths: [String] = [
                 "/ads/",
@@ -119,6 +122,9 @@ extension URL {
                 "/billboard/",
                 "/takeover/",
                 "/interstitial/",
+                // Esperanto ad service sub-paths on spclient
+                "/esperanto/ads",
+                "/ads/esperanto",
             ]
             for p in spAdPaths {
                 if path.contains(p) { return true }
@@ -126,7 +132,6 @@ extension URL {
         }
 
         // ── Generic Spotify ad path segments ─────────────────────────────────────
-        // These appear on any Spotify domain (api.spotify.com, etc.)
         let genericAdPaths: [String] = [
             "/ads/",
             "/ad/",
