@@ -3,17 +3,15 @@ import Foundation
 
 // MARK: - HubsAdBlocker
 //
-// This hook targets HUBViewModelBuilderImplementation, which handles the parsed
-// hub view model before it is rendered. It acts as a second line of defense
-// after the network-level stripping in DataLoaderServiceHooks.x.swift.
+// This hook targets HUBViewModelBuilderImplementation (confirmed present in
+// Spotify 9.1.32 binary) and strips ad components from hub JSON before
+// the view model is built.
 //
-// NOTE: If HUBViewModelBuilderImplementation does not exist in the running
-// Spotify version, Orion silently skips this hook — which is fine, because
-// the network-level stripping in DataLoaderServiceHooks.x.swift handles it.
+// The PRIMARY fix for visual ads is in AdViewBlocker.x.swift which hooks
+// the actual ad view classes. This file is a belt-and-suspenders second layer.
 //
-// The definitive fix for visual ads (Cartier, Credit Karma, etc.) is in
-// DataLoaderServiceHooks.x.swift via stripAdsFromHubJSON() + isHubResponseURL().
-// This file is kept as a belt-and-suspenders second layer.
+// The hub JSON stripping logic is also used by DataLoaderServiceHooks.x.swift
+// at the network level (see stripAdsFromHubJSON / isHubResponseURL there).
 
 class HubsAdBlocker: ClassHook<NSObject> {
     typealias Group = BasePremiumPatchingGroup
@@ -29,8 +27,6 @@ class HubsAdBlocker: ClassHook<NSObject> {
         dict = mutateHubsJSON(dict)
 
         // Strip ads using the shared stripAdsFromHubJSON logic.
-        // We re-serialize and re-parse to reuse the exact same filtering
-        // code path used at the network level.
         if let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
            let cleaned = stripAdsFromHubJSON(data),
            let cleanedDict = (try? JSONSerialization.jsonObject(with: cleaned, options: [])) as? [String: Any] {
