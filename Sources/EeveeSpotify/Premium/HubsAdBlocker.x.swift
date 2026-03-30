@@ -1,128 +1,273 @@
 import Orion
 import Foundation
 
-// MARK: - Deep recursive ad scanner
-// Scans EVERY string value in the entire component tree, not just top-level fields.
-// This catches ads that hide their identity in nested tracking/custom_data objects.
+// MARK: - HubsAdBlocker
+//
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  ROOT CAUSE OF ADS SLIPPING THROUGH (all previous versions)             ║
+// ║                                                                          ║
+// ║  Spotify's HubFramework JSON schema has TWO separate "id" fields:       ║
+// ║                                                                          ║
+// ║  {                                                                       ║
+// ║    "id": "home-section-3",          ← LOGGING ID (generic, useless)     ║
+// ║    "component": {                                                        ║
+// ║      "id": "spotify:ad-banner",     ← REAL COMPONENT TYPE ← CHECK THIS  ║
+// ║      "category": "banner"                                                ║
+// ║    },                                                                    ║
+// ║    "text": { "title": "Advertisement" },                                 ║
+// ║    ...                                                                   ║
+// ║  }                                                                       ║
+// ║                                                                          ║
+// ║  All previous versions checked component["id"] (the logging ID).        ║
+// ║  That is why Cartier / Credit Karma ads always got through —             ║
+// ║  their logging ID is something like "home-section-3", which contains    ║
+// ║  no ad keywords. The real type is in component["component"]["id"].       ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
 
-private let adSignalKeywords: Set<String> = [
-    // Generic ad terms
-    "advertisement", "advertise", "advertising",
-    // Spotify-specific ad identifiers
-    "dfp", "hpto", "marquee", "ad-logic", "adlogic", "ad_logic",
-    "gam-ad", "gam_ad", "google_ads", "googleads",
-    "doubleclick", "googlesyndication", "adservice",
-    "moatads", "scorecardresearch",
-    // Spotify internal ad component keys
-    "spotifyxp", "xp-ad", "xp_ad",
-    "native-ad", "native_ad", "nativead",
-    "display-ad", "display_ad", "displayad",
-    "search-ad", "search_ad", "searchad",
-    "home-ad", "home_ad", "homead",
-    "billboard", "takeover", "roadblock",
-    "interstitial", "offerwall",
-    "preroll", "midroll", "postroll",
-    "rewarded-ad", "rewarded_ad",
-    "sponsored-content", "sponsored_content",
-    "promoted-content", "promoted_content",
-    "upsell-banner", "upsell_banner",
-    // Credit Karma / Cartier style brand injection
-    "credit-karma", "credit_karma", "creditkarma",
+// MARK: - Known Spotify ad component type identifiers (namespace:name)
+// These are the values that appear in component["component"]["id"].
+// Spotify uses the "spotify:" namespace for all its own components.
+private let adComponentTypeIds: Set<String> = [
+    // Core ad types
+    "spotify:ad",
+    "spotify:ad-banner",
+    "spotify:ad-card",
+    "spotify:ad-row",
+    "spotify:ad-carousel",
+    "spotify:ad-header",
+    "spotify:ad-overlay",
+    "spotify:ad-interstitial",
+    "spotify:ad-takeover",
+    "spotify:ad-billboard",
+    "spotify:ad-leaderboard",
+    "spotify:ad-mrec",
+    "spotify:ad-halfpage",
+    "spotify:ad-skin",
+    "spotify:ad-roadblock",
+    "spotify:ad-wallpaper",
+    "spotify:ad-expandable",
+    "spotify:ad-video",
+    "spotify:ad-audio",
+    "spotify:ad-native",
+    "spotify:ad-display",
+    "spotify:ad-search",
+    "spotify:ad-home",
+    "spotify:ad-nowplaying",
+    // Sponsored / promoted
+    "spotify:sponsored",
+    "spotify:sponsored-card",
+    "spotify:sponsored-row",
+    "spotify:sponsored-banner",
+    "spotify:sponsored-content",
+    "spotify:promoted",
+    "spotify:promoted-card",
+    "spotify:promoted-row",
+    // Upsell
+    "spotify:upsell",
+    "spotify:upsell-banner",
+    "spotify:upsell-card",
+    "spotify:upsell-row",
+    "spotify:premium-upsell",
+    "spotify:premium-upsell-banner",
+    "spotify:premium-upsell-card",
+    "spotify:premium-upsell-row",
+    // Ad platform identifiers
+    "spotify:marquee",
+    "spotify:billboard",
+    "spotify:hpto",
+    "spotify:dfp",
+    "spotify:gam",
+    "spotify:takeover",
+    "spotify:interstitial",
+    "spotify:overlay",
+    "spotify:banner",
+    // Misc
+    "spotify:merch",
+    "spotify:ticket-upsell",
+    "spotify:rewarded",
+    "spotify:offerwall",
+    "spotify:survey",
+    "spotify:incentivized",
+    "spotify:brand-ad",
+    "spotify:brand_ad",
+]
+
+// MARK: - Substring keywords for component type matching
+// Catches any component["component"]["id"] that contains these substrings.
+// This is a safety net for new ad type identifiers Spotify may introduce.
+private let adTypeSubstrings: [String] = [
+    ":ad", ":ads", ":ad-", ":ad_",
+    "ad:", "ads:",
+    ":advertisement", ":advertis",
+    ":sponsored", ":sponsor",
+    ":promoted", ":promotion",
+    ":upsell", ":premium-upsell",
+    ":billboard", ":takeover",
+    ":interstitial", ":overlay",
+    ":marquee", ":hpto", ":dfp", ":gam",
+    ":rewarded", ":offerwall",
+    ":native-ad", ":display-ad",
+    ":video-ad", ":audio-ad",
+    ":search-ad", ":home-ad",
+    ":brand-ad", ":brand_ad",
+    ":merch", ":ticket-upsell",
+]
+
+// MARK: - Keywords for the component["component"]["category"] field
+// Spotify uses categories like "banner", "overlay" for ad components.
+// We only strip on category if there's a corroborating signal elsewhere.
+private let adCategoryValues: Set<String> = [
+    "ad", "ads", "advertisement",
+    "sponsored", "promoted",
+    "upsell", "premium-upsell",
+    "billboard", "takeover",
+    "interstitial", "overlay",
+    "marquee", "hpto", "dfp", "gam",
+    "rewarded", "offerwall",
+]
+
+// MARK: - Keywords for deep-scanning metadata/logging/custom blobs
+// These are checked recursively through the entire subtree of those fields.
+private let adMetaKeywords: [String] = [
+    "advertisement", "advertis",
+    "sponsored", "sponsor",
+    "promoted",
+    "upsell",
+    "billboard", "takeover",
+    "marquee", "hpto", "dfp", "gam",
+    "credit-karma", "creditkarma", "credit_karma",
+    "cartier",
+    "ad_type", "ad_id", "ad_unit", "adtype", "adunit",
+    "is_ad", "isad", "is_sponsored",
+    "campaign_id", "campaign_type",
+    "impression_url", "click_url",
+    "ad_slot", "ad_slots",
+    "native_ad", "nativead", "display_ad",
+    "rewarded", "offerwall",
+    "brand_ad", "brand-ad",
+]
+
+// MARK: - Keywords for the top-level logging ID: component["id"]
+// These are patterns Spotify sometimes uses in the logging IDs of ad components.
+private let adLoggingIdKeywords: [String] = [
+    "advertisement", "advertis",
+    "sponsored", "sponsor",
+    "promoted",
+    "upsell",
+    "billboard", "takeover",
+    "interstitial",
+    "marquee", "hpto", "dfp", "gam",
+    "merch-",
+    "rewarded", "offerwall",
+    "native-ad", "display-ad",
+    "video-ad", "audio-ad",
+    "search-ad", "home-ad",
+    "brand-ad", "brand_ad",
+    "credit-karma", "creditkarma",
     "cartier",
 ]
 
-// Keywords checked only against component `id`, `type`, `component_key` fields
-private let adIdKeywords: Set<String> = [
-    "ad", "ads",
-    "advertisement", "advertise", "advertising",
-    "sponsored", "sponsor",
-    "upsell", "premium-upsell", "premium_upsell",
-    "campaign", "promoted", "promotion",
-    "billboard", "banner", "takeover", "roadblock",
-    "interstitial", "overlay", "popup", "pop-up",
-    "native-ad", "native_ad", "display-ad", "display_ad",
-    "search-ad", "search_ad", "home-ad", "home_ad",
-    "dfp", "hpto", "marquee", "adlogic", "ad-logic", "ad_logic",
-    "spotifyxp", "xp-ad", "xp_ad",
-    "preroll", "midroll", "postroll", "rewarded",
-    "offerwall", "incentivized", "survey",
-    "merch", "ticket-upsell",
-]
+// MARK: - Detection helpers
 
-// MARK: - Utility: deep-scan any JSON value for ad signals
-
-private func stringContainsAdSignal(_ s: String) -> Bool {
-    let lower = s.lowercased()
-    for kw in adSignalKeywords {
+private func componentTypeIsAd(_ typeId: String) -> Bool {
+    let lower = typeId.lowercased()
+    if adComponentTypeIds.contains(lower) { return true }
+    for kw in adTypeSubstrings {
         if lower.contains(kw) { return true }
     }
     return false
 }
 
-private func anyValueContainsAdSignal(_ value: Any) -> Bool {
+private func metaValueContainsAdSignal(_ value: Any) -> Bool {
     if let s = value as? String {
-        return stringContainsAdSignal(s)
+        let lower = s.lowercased()
+        for kw in adMetaKeywords {
+            if lower.contains(kw) { return true }
+        }
+        return false
     }
     if let dict = value as? [String: Any] {
-        for (_, v) in dict {
-            if anyValueContainsAdSignal(v) { return true }
+        for (k, v) in dict {
+            let lk = k.lowercased()
+            for kw in adMetaKeywords {
+                if lk.contains(kw) { return true }
+            }
+            if metaValueContainsAdSignal(v) { return true }
         }
     }
     if let arr = value as? [Any] {
         for v in arr {
-            if anyValueContainsAdSignal(v) { return true }
+            if metaValueContainsAdSignal(v) { return true }
         }
-    }
-    return false
-}
-
-// MARK: - Component-level ad detection
-
-private func componentIdMatchesAd(_ id: String) -> Bool {
-    let lower = id.lowercased()
-    for kw in adIdKeywords {
-        if lower.contains(kw) { return true }
     }
     return false
 }
 
 private func shouldStripComponent(_ component: [String: Any]) -> Bool {
-    // 1. Check `id` field
-    if let id = component["id"] as? String, componentIdMatchesAd(id) {
+
+    // ── CHECK 1: component["component"]["id"]  ← THE KEY FIX ─────────────────
+    // This is the authoritative component type in HubFramework JSON schema.
+    // Format: "namespace:name" e.g. "spotify:ad-banner", "spotify:card"
+    if let compDict = component["component"] as? [String: Any],
+       let compTypeId = compDict["id"] as? String,
+       componentTypeIsAd(compTypeId) {
         return true
     }
 
-    // 2. Check `type` field
-    if let type_ = component["type"] as? String, componentIdMatchesAd(type_) {
-        return true
+    // ── CHECK 2: component["component"]["category"] ───────────────────────────
+    // Spotify uses "banner", "overlay", "interstitial" for ad components.
+    // Only strip if there's a corroborating signal (avoid stripping real banners).
+    if let compDict = component["component"] as? [String: Any],
+       let category = compDict["category"] as? String {
+        let lowerCat = category.lowercased()
+        if adCategoryValues.contains(lowerCat) {
+            // Require at least one more signal to confirm this is an ad
+            let hasAdId = (component["id"] as? String).map { id in
+                adLoggingIdKeywords.contains(where: { id.lowercased().contains($0) })
+            } ?? false
+            let hasAdMeta = ["metadata", "logging", "custom", "customData"].contains(where: { key in
+                component[key].map { metaValueContainsAdSignal($0) } ?? false
+            })
+            if hasAdId || hasAdMeta { return true }
+        }
     }
 
-    // 3. Check `component_key` / `componentKey` — Spotify uses this for SpotifyXP / DFP ad slots
-    for key in ["component_key", "componentKey", "component_type", "componentType"] {
-        if let v = component[key] as? String, componentIdMatchesAd(v) {
+    // ── CHECK 3: component["id"] (logging/tracking ID) ────────────────────────
+    // Spotify sometimes puts ad keywords in the logging ID.
+    if let id = component["id"] as? String {
+        let lower = id.lowercased()
+        for kw in adLoggingIdKeywords {
+            if lower.contains(kw) { return true }
+        }
+    }
+
+    // ── CHECK 4: text fields ──────────────────────────────────────────────────
+    // Ad components often have "Advertisement" as the title text.
+    if let text = component["text"] as? [String: Any] {
+        for (_, v) in text {
+            if let s = v as? String {
+                let lower = s.lowercased()
+                if lower == "advertisement" || lower == "ad" || lower == "sponsored" {
+                    return true
+                }
+            }
+        }
+    }
+
+    // ── CHECK 5: Deep-scan metadata/logging/custom blobs ─────────────────────
+    // Spotify buries ad identity in nested tracking/custom_data objects.
+    for key in ["metadata", "logging", "custom", "customData", "tracking",
+                "analytics", "impression_data", "impressionData",
+                "event_data", "eventData", "payload", "data"] {
+        if let v = component[key], metaValueContainsAdSignal(v) {
             return true
         }
     }
 
-    // 4. Deep-scan `tracking`, `custom_data`, `customData`, `logging`, `metadata`
-    //    These nested objects contain the true ad identity even when the top-level id is generic.
-    for key in ["tracking", "custom_data", "customData", "logging", "metadata",
-                "analytics", "impression_data", "impressionData",
-                "event_data", "eventData", "payload", "data"] {
-        if let v = component[key] {
-            if anyValueContainsAdSignal(v) { return true }
-        }
-    }
-
-    // 5. Check `reason` field
-    if let reason = component["reason"] as? String, componentIdMatchesAd(reason) {
-        return true
-    }
-
-    // 6. Check `uri` field — Spotify ad URIs often contain "ad" or "spotify:ad:"
+    // ── CHECK 6: URI field ────────────────────────────────────────────────────
     if let uri = component["uri"] as? String {
         let lower = uri.lowercased()
-        if lower.contains("spotify:ad:") || lower.contains(":ad:") || lower.contains("/ad/") {
+        if lower.contains("spotify:ad:") || lower.contains(":ad:") {
             return true
         }
     }
@@ -142,7 +287,6 @@ private func filterComponents(_ components: [[String: Any]]) -> [[String: Any]] 
     var result = [[String: Any]]()
     for var component in components {
         if shouldStripComponent(component) { continue }
-        // Recurse into all known container keys
         for key in containerKeys {
             if let nested = component[key] as? [[String: Any]] {
                 component[key] = filterComponents(nested)
@@ -153,13 +297,9 @@ private func filterComponents(_ components: [[String: Any]]) -> [[String: Any]] 
     return result
 }
 
-// Recursively strip ad components from any value (handles mixed arrays)
 private func deepFilterValue(_ value: Any) -> Any {
     if var dict = value as? [String: Any] {
-        if shouldStripComponent(dict) {
-            // Return empty dict to neutralise the component in place
-            return [String: Any]()
-        }
+        if shouldStripComponent(dict) { return [String: Any]() }
         for key in containerKeys {
             if let nested = dict[key] as? [[String: Any]] {
                 dict[key] = filterComponents(nested)
@@ -199,33 +339,36 @@ class HubsAdBlocker: ClassHook<NSObject> {
         // Apply LikedSongs mutation first
         dict = mutateHubsJSON(dict)
 
-        // Filter every top-level container key that can carry ad components
-        let topLevelContainerKeys = [
+        // Filter all known top-level container keys
+        let topKeys = [
             "body", "sections", "items", "slots", "overlays",
             "rows", "cards", "modules", "blocks", "shelves",
             "components", "tiles", "entries", "cells",
         ]
-        for key in topLevelContainerKeys {
+        for key in topKeys {
             if let arr = dict[key] as? [[String: Any]] {
                 dict[key] = filterComponents(arr)
             }
         }
 
-        // Filter header children
+        // Filter header and its children
         if var header = dict["header"] as? [String: Any] {
-            for key in containerKeys {
-                if let nested = header[key] as? [[String: Any]] {
-                    header[key] = filterComponents(nested)
+            if shouldStripComponent(header) {
+                dict.removeValue(forKey: "header")
+            } else {
+                for key in containerKeys {
+                    if let nested = header[key] as? [[String: Any]] {
+                        header[key] = filterComponents(nested)
+                    }
                 }
+                dict["header"] = header
             }
-            dict["header"] = header
         }
 
-        // Deep-filter the entire dictionary for any remaining ad components
-        // (catches ads nested inside non-standard keys)
-        for (key, value) in dict {
-            if topLevelContainerKeys.contains(key) || key == "header" { continue }
-            dict[key] = deepFilterValue(value)
+        // Deep-filter all remaining keys (catches ads in non-standard containers)
+        for key in dict.keys {
+            if topKeys.contains(key) || key == "header" { continue }
+            dict[key] = deepFilterValue(dict[key]!)
         }
 
         orig.addJSONDictionary(dict as NSDictionary)
