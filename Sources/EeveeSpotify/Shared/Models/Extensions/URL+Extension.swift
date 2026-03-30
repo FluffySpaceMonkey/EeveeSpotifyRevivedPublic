@@ -62,87 +62,144 @@ extension URL {
     var isPushkaTokens: Bool {
         self.path.contains("pushka-tokens")
     }
-    
+
+    // MARK: - Ad-related URL detection
+    // Covers Spotify's own ad delivery infrastructure plus third-party ad networks.
     var isAdRelated: Bool {
         let path = self.path.lowercased()
         let host = (self.host ?? "").lowercased()
+        let fullURL = self.absoluteString.lowercased()
 
-        // Block known third-party ad networks by host
-        let adHosts = [
-            "doubleclick.net", "googlesyndication.com", "googleadservices.com",
-            "adservice.google.com", "moatads.com", "scorecardresearch.com",
-            "omtrdc.net", "demdex.net", "ads.spotify.com", "adserver.spotify.com",
-            "spclient.wg.spotify.com"  // spclient serves ad payloads too
+        // ── Third-party ad network hosts ──────────────────────────────────────────
+        let adHosts: [String] = [
+            "doubleclick.net",
+            "googlesyndication.com",
+            "googleadservices.com",
+            "adservice.google.com",
+            "moatads.com",
+            "scorecardresearch.com",
+            "omtrdc.net",
+            "demdex.net",
+            "ads.spotify.com",
+            "adserver.spotify.com",
         ]
         for adHost in adHosts {
-            if host.contains(adHost) && (
-                path.contains("/ads/") || path.contains("/ad/") ||
-                path.contains("advert") || path.contains("sponsor") ||
-                path.contains("campaign") || path.contains("promoted") ||
-                path.contains("billboard") || path.contains("banner") ||
-                path.contains("interstitial") || path.contains("overlay") ||
-                path.contains("takeover") || path.contains("native")
-            ) {
+            if host == adHost || host.hasSuffix("." + adHost) {
                 return true
             }
         }
 
-        // Block ad-related path segments (Spotify's own ad delivery endpoints)
-        return path.contains("/ads/")
-            || path.contains("/ad/")
-            || path.contains("/ad-logic/")
-            || path.contains("/ad-slot/")
-            || path.contains("/ad-slots/")
-            || path.contains("/ad-inventory/")
-            || path.contains("/ad-targeting/")
-            || path.contains("/ad-decision/")
-            || path.contains("/ad-request/")
-            || path.contains("/ad-event/")
-            || path.contains("/ad-impression/")
-            || path.contains("/ad-click/")
-            || path.contains("/ad-tracking/")
-            || path.contains("/ad-measurement/")
-            || path.contains("/advert/")
-            || path.contains("/adverts/")
-            || path.contains("/advertising/")
-            || path.contains("/sponsored/")
-            || path.contains("/promoted/")
-            || path.contains("/upsell/")
-            || path.contains("/upsells/")
-            || path.contains("/campaign/")
-            || path.contains("/campaigns/")
-            || path.contains("/billboard/")
-            || path.contains("/billboards/")
-            || path.contains("/banner/")
-            || path.contains("/banners/")
-            || path.contains("/interstitial/")
-            || path.contains("/interstitials/")
-            || path.contains("/overlay/")
-            || path.contains("/overlays/")
-            || path.contains("/popup/")
-            || path.contains("/pop-up/")
-            || path.contains("/search-ad/")
-            || path.contains("/search-ads/")
-            || path.contains("/home-ad/")
-            || path.contains("/home-ads/")
-            || path.contains("/takeover/")
-            || path.contains("/takeovers/")
-            || path.contains("/native-ad/")
-            || path.contains("/display-ad/")
-            || path.contains("/video-ad/")
-            || path.contains("/audio-ad/")
-            || path.contains("/rewarded/")
-            || path.contains("/offerwall/")
-            || path.contains("doubleclick")
-            || path.contains("googlesyndication")
-            || path.contains("adservice.google")
-            || path.contains("moatads")
-            || path.contains("scorecardresearch")
-            // Spotify spclient ad-specific paths
-            || (path.contains("spclient") && (
-                path.contains("ad-logic") || path.contains("adlogic") ||
-                path.contains("adserver") || path.contains("ad-server")
-            ))
+        // ── Spotify spclient ad-delivery paths ────────────────────────────────────
+        // spclient.wg.spotify.com is the main Spotify API gateway.
+        // Ad-specific sub-paths on it must be blocked while leaving other API calls intact.
+        if host.contains("spclient") {
+            let spAdPaths: [String] = [
+                "/ads/",
+                "/ad-logic/",
+                "/ad_logic/",
+                "/adlogic/",
+                "/dfp/",
+                "/hpto/",
+                "/marquee/",
+                "/gam/",
+                "/ad-decision/",
+                "/ad-request/",
+                "/ad-slot/",
+                "/ad-slots/",
+                "/ad-inventory/",
+                "/ad-targeting/",
+                "/ad-event/",
+                "/ad-impression/",
+                "/ad-click/",
+                "/ad-tracking/",
+                "/ad-measurement/",
+                "/sponsored/",
+                "/promoted/",
+                "/campaign/",
+                "/billboard/",
+                "/takeover/",
+                "/interstitial/",
+            ]
+            for p in spAdPaths {
+                if path.contains(p) { return true }
+            }
+        }
+
+        // ── Generic Spotify ad path segments ─────────────────────────────────────
+        // These appear on any Spotify domain (api.spotify.com, etc.)
+        let genericAdPaths: [String] = [
+            "/ads/",
+            "/ad/",
+            "/ad-logic/",
+            "/ad_logic/",
+            "/adlogic/",
+            "/dfp/",
+            "/hpto/",
+            "/marquee/",
+            "/gam-ad/",
+            "/ad-slot/",
+            "/ad-slots/",
+            "/ad-inventory/",
+            "/ad-targeting/",
+            "/ad-decision/",
+            "/ad-request/",
+            "/ad-event/",
+            "/ad-impression/",
+            "/ad-click/",
+            "/ad-tracking/",
+            "/ad-measurement/",
+            "/advert/",
+            "/adverts/",
+            "/advertising/",
+            "/sponsored/",
+            "/promoted/",
+            "/upsell/",
+            "/upsells/",
+            "/campaign/",
+            "/campaigns/",
+            "/billboard/",
+            "/billboards/",
+            "/banner/",
+            "/banners/",
+            "/interstitial/",
+            "/interstitials/",
+            "/overlay/",
+            "/overlays/",
+            "/popup/",
+            "/pop-up/",
+            "/takeover/",
+            "/takeovers/",
+            "/native-ad/",
+            "/display-ad/",
+            "/video-ad/",
+            "/audio-ad/",
+            "/rewarded/",
+            "/offerwall/",
+            "/search-ad/",
+            "/search-ads/",
+            "/home-ad/",
+            "/home-ads/",
+        ]
+        for p in genericAdPaths {
+            if path.contains(p) { return true }
+        }
+
+        // ── Hostname substring matches (catch CDN variants) ───────────────────────
+        let adHostSubstrings: [String] = [
+            "doubleclick",
+            "googlesyndication",
+            "adservice.google",
+            "moatads",
+            "scorecardresearch",
+        ]
+        for s in adHostSubstrings {
+            if host.contains(s) { return true }
+        }
+
+        // ── Spotify URI scheme ad detection ───────────────────────────────────────
+        if fullURL.hasPrefix("spotify:ad:") { return true }
+
+        return false
     }
 
     // Additional session protection endpoints
