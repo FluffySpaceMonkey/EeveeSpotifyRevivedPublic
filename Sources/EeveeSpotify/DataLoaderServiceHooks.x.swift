@@ -1,43 +1,51 @@
 import Foundation
 import Orion
-
 // Global variable for access token
 public var spotifyAccessToken: String?
-
 // Helper function to start capturing from other files
 func DataLoaderServiceHooks_startCapturing() {
 }
-
 // MARK: - Hub JSON Ad Stripping
 //
-// This is a network-level defense layer for visual ads on Search and Home screens.
-// The PRIMARY fix is in AdViewBlocker.x.swift (view-layer hooks).
-// This file provides belt-and-suspenders protection at the network level.
-//
-// SPOTIFY v9.1.32 AD DELIVERY ARCHITECTURE (confirmed by binary analysis):
+// SPOTIFY v9.1.32 AD DELIVERY ARCHITECTURE (confirmed by binary analysis of decrypted IPA):
 //
 //   Home screen ads:   Delivered via Casita API (spotify.casita.v1.resolved.*)
-//                      as protobuf over spclient.wg.spotify.com
-//   Search/Browse ads: Delivered via Browsita API (spotify.browsita.v1.resolved.*)
-//                      as protobuf over spclient.wg.spotify.com
+//                      Confirmed ad types in proto: ImageBrandAd, VideoBrandAd, PromotionV1/V3
+//   Search/Browse ads: Delivered via Browsita API (spotify.browsita.v2.*)
+//                      Confirmed ad types in proto: BrowseAd, BrowseAdMetadata
 //   Overlay ads:       Delivered via AdsStandalone_MobileOverlayImpl
+//                      Confirmed class: _TtC31AdsStandalone_MobileOverlayImpl26MobileOverlayPresenterImpl
 //   Marquee ads:       Delivered via Marquee_MarqueeImpl
+//                      Confirmed class: _TtC19Marquee_MarqueeImpl17MarqueeController
+//   Audio/in-stream:   Delivered via Esperanto gRPC service (SPTEsperantoService)
+//                      Confirmed paths: /.spotify.ads.esperanto.proto.TriggerSlotRequest etc.
+//   Embedded ads:      Confirmed component IDs in binary:
+//                        "mobile-display-ad-card"
+//                        "mobile-ads-embedded-npv-display-card"
+//                        "mobile-ads-mobile-overlay"
+//                        "embedded_npv_display_element"
+//                        "display_ad_element"
 //
-//   The responses are PROTOBUF, not plain JSON. The /hm/ path assumption
-//   in previous versions was wrong — Spotify 9.1.x uses /casita/ and /browsita/.
+// APPROACH:
+//   1. Block all ad delivery network requests before data arrives (handler(.cancel))
+//   2. Strip ad components from JSON hub responses (HUBViewModelBuilderImplementation hook)
+//   3. Buffer and clean any JSON responses from casita/browsita paths
 //
-//   However, the HUBViewModelBuilderImplementation hook (HubsAdBlocker.x.swift)
-//   still receives JSON dictionaries for older hub-based pages. Both layers
-//   are kept active.
-//
-// AD NETWORK BLOCKING:
-//   Ad delivery endpoints are blocked at the HTTP response level in
-//   URLSession:dataTask:didReceiveResponse:completionHandler: by calling
-//   handler(.cancel) before any data arrives.
+// NOTE: AdViewBlocker.x.swift has been REMOVED from this version due to crashes.
+//       All ad blocking is done at the network and JSON levels only.
 
-// MARK: - Ad component detection (shared with HubsAdBlocker)
-
+// MARK: - Ad component type IDs (confirmed in Spotify 9.1.32 binary)
 private let adComponentTypeIds: Set<String> = [
+    // Confirmed directly in binary strings
+    "mobile-display-ad-card",
+    "mobile-ads-embedded-npv-display-card",
+    "mobile-ads-mobile-overlay",
+    "embedded_npv_display_element",
+    "display_ad_element",
+    "display_ad_card",
+    "video_ad_card",
+    "video_ad_element",
+    // Spotify URI-style component IDs
     "spotify:ad", "spotify:ad-banner", "spotify:ad-card", "spotify:ad-row",
     "spotify:ad-carousel", "spotify:ad-header", "spotify:ad-overlay",
     "spotify:ad-interstitial", "spotify:ad-takeover", "spotify:ad-billboard",
@@ -60,6 +68,7 @@ private let adComponentTypeIds: Set<String> = [
     "spotify:incentivized", "spotify:survey",
 ]
 
+// Substring patterns for component type IDs not in the exact set
 private let adTypeSubstrings: [String] = [
     ":ad", ":ad-", ":ad_", "ad:", "ads:",
     ":advertisement", ":advertis",
@@ -74,8 +83,12 @@ private let adTypeSubstrings: [String] = [
     ":video-ad", ":audio-ad",
     ":search-ad", ":home-ad",
     ":brand-ad", ":brand_ad",
+    // Confirmed in binary
+    "display_ad", "video_ad", "embedded_ad", "browse_ad", "brand_ad",
+    "mobile-display-ad", "mobile-ads-",
 ]
 
+// Keywords for deep-scanning metadata/logging blobs
 private let adMetaKeywords: [String] = [
     "advertisement", "advertis",
     "sponsored", "sponsor",
@@ -93,8 +106,12 @@ private let adMetaKeywords: [String] = [
     "native_ad", "nativead", "display_ad",
     "rewarded", "offerwall",
     "brand_ad", "brand-ad",
+    // Confirmed in binary (casita proto types)
+    "imagebrandad", "videobrandad", "browseadmetadata",
+    "embeddedadmetadata", "brandads",
 ]
 
+// Keywords for the top-level logging/tracking ID field
 private let adLoggingIdKeywords: [String] = [
     "advertisement", "advertis",
     "sponsored", "sponsor",
@@ -111,6 +128,10 @@ private let adLoggingIdKeywords: [String] = [
     "brand-ad", "brand_ad",
     "credit-karma", "creditkarma",
     "cartier",
+    // Confirmed in binary
+    "mobile-display-ad", "mobile-ads-",
+    "embedded-ad", "embedded_ad",
+    "browse-ad", "browse_ad",
 ]
 
 private func componentTypeIsAd(_ typeId: String) -> Bool {
@@ -148,7 +169,9 @@ private func metaValueContainsAdSignal(_ value: Any) -> Bool {
 }
 
 private func shouldStripHubComponent(_ component: [String: Any]) -> Bool {
-    // CHECK 1: component["component"]["id"] — the authoritative HubFramework type
+    // CHECK 1: component["component"]["id"] — the authoritative HubFramework component type
+    // This is the MOST IMPORTANT check. The component type ID (e.g. "mobile-display-ad-card")
+    // is stored here, NOT in the top-level "id" field.
     if let compDict = component["component"] as? [String: Any],
        let compTypeId = compDict["id"] as? String,
        componentTypeIsAd(compTypeId) {
@@ -168,7 +191,7 @@ private func shouldStripHubComponent(_ component: [String: Any]) -> Bool {
         if adCategories.contains(lowerCat) { return true }
     }
 
-    // CHECK 3: component["id"] (logging/tracking ID)
+    // CHECK 3: component["id"] (logging/tracking ID) — secondary check
     if let id = component["id"] as? String {
         let lower = id.lowercased()
         for kw in adLoggingIdKeywords {
@@ -176,7 +199,7 @@ private func shouldStripHubComponent(_ component: [String: Any]) -> Bool {
         }
     }
 
-    // CHECK 4: text title == "Advertisement"
+    // CHECK 4: text title == "Advertisement" (visible in screenshots)
     if let text = component["text"] as? [String: Any] {
         for (_, v) in text {
             if let s = v as? String {
@@ -188,17 +211,17 @@ private func shouldStripHubComponent(_ component: [String: Any]) -> Bool {
         }
     }
 
-    // CHECK 5: deep-scan metadata/logging/custom blobs
+    // CHECK 5: deep-scan all metadata/logging/tracking blobs
     for key in ["metadata", "logging", "custom", "customData", "tracking",
                 "analytics", "impression_data", "impressionData",
                 "event_data", "eventData", "payload", "data",
-                "custom_data", "customdata"] {
+                "custom_data", "customdata", "ad_data", "adData"] {
         if let v = component[key], metaValueContainsAdSignal(v) {
             return true
         }
     }
 
-    // CHECK 6: URI field
+    // CHECK 6: URI field contains spotify:ad:
     if let uri = component["uri"] as? String {
         let lower = uri.lowercased()
         if lower.contains("spotify:ad:") || lower.contains(":ad:") {
@@ -262,7 +285,7 @@ private func deepFilterHubValue(_ value: Any) -> Any {
 }
 
 /// Strip all ad components from a raw Hubs JSON response Data.
-/// Returns the cleaned Data, or nil if the data is not valid JSON or not a hub response.
+/// Returns the cleaned Data, or nil if the data is not valid JSON.
 func stripAdsFromHubJSON(_ data: Data) -> Data? {
     guard
         var dict = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
@@ -273,7 +296,6 @@ func stripAdsFromHubJSON(_ data: Data) -> Data? {
         "rows", "cards", "modules", "blocks", "shelves",
         "components", "tiles", "entries", "cells",
     ]
-
     for key in topKeys {
         if let arr = dict[key] as? [[String: Any]] {
             dict[key] = filterHubComponents(arr)
@@ -307,39 +329,28 @@ func stripAdsFromHubJSON(_ data: Data) -> Data? {
 }
 
 // MARK: - Hub URL detection
-// Spotify 9.1.32 delivers hub pages via spclient.wg.spotify.com.
-// The response format is protobuf (Casita/Browsita APIs), but the
-// HUBViewModelBuilderImplementation hook receives JSON dicts for legacy hub pages.
-// We keep the network-level filter for any JSON hub responses that slip through.
 private func isHubResponseURL(_ url: URL) -> Bool {
     let path = url.path.lowercased()
     let host = (url.host ?? "").lowercased()
-
-    // Must be a Spotify API host
     guard host.contains("spotify.com") || host.contains("spclient") else { return false }
-
-    // Spotify 9.1.32 hub page paths (confirmed by binary analysis)
-    // Legacy /hm/ paths (older Spotify versions)
-    // Casita/Browsita paths are protobuf and handled by AdViewBlocker.x.swift
     let hubPathPrefixes: [String] = [
-        "/hm/",           // Legacy hub pages (JSON)
-        "/casita/",       // Home screen (protobuf - filtered at view layer)
-        "/browsita/",     // Browse/Search (protobuf - filtered at view layer)
+        "/hm/",
+        "/casita/",
+        "/browsita/",
         "/user-customization-service/",
     ]
-
     for prefix in hubPathPrefixes {
         if path.hasPrefix(prefix) || path.contains(prefix) { return true }
     }
-
     return false
 }
 
-// MARK: - Ad URL detection
-// These are the network-level ad delivery endpoints to block entirely.
+// MARK: - Ad URL detection (network-level block)
+// Confirmed by binary analysis of Spotify 9.1.32 decrypted IPA.
 private func isAdDeliveryURL(_ url: URL) -> Bool {
     let path = url.path.lowercased()
     let host = (url.host ?? "").lowercased()
+    let fullURL = url.absoluteString.lowercased()
 
     // Block known third-party ad network hosts entirely
     let adHosts: [String] = [
@@ -353,6 +364,18 @@ private func isAdDeliveryURL(_ url: URL) -> Bool {
     ]
     for adHost in adHosts {
         if host == adHost || host.hasSuffix("." + adHost) { return true }
+    }
+
+    // Block Spotify's Esperanto ad service gRPC paths
+    // Confirmed in binary: /.spotify.ads.esperanto.proto.TriggerSlotRequest etc.
+    // These are the in-stream/audio ad slot management endpoints.
+    let esperantoAdPaths: [String] = [
+        "spotify.ads.esperanto.proto",
+        "/esperanto/ads",
+        "/ads/esperanto",
+    ]
+    for p in esperantoAdPaths {
+        if fullURL.contains(p) { return true }
     }
 
     // Block Spotify's ad delivery path fragments
@@ -375,13 +398,10 @@ private func isAdDeliveryURL(_ url: URL) -> Bool {
 
 class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
     static let targetName = "SPTDataLoaderService"
-
     // orion:new
     static var cachedCustomizeData: Data?
-
     // orion:new
     static var handledCustomizeTasks = Set<Int>()
-
     // orion:new
     func shouldBlock(_ url: URL) -> Bool {
         let elapsed = Date().timeIntervalSince(tweakInitTime)
@@ -395,7 +415,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             || isAdDeliveryURL(url) {
             return true
         }
-
         // Only block these after startup (30s) to allow initial login/initialization
         if elapsed > 30 {
             return url.isAccountValidate || url.isOndemandSelector
@@ -406,7 +425,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         
         return false
     }
-
     // orion:new
     func shouldModify(_ url: URL) -> Bool {
         let shouldPatchPremium = BasePremiumPatchingGroup.isActive
@@ -419,13 +437,9 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
     }
     
     // orion:new
-    func respondWithCustomData(_ data: Data, task: URLSessionDataTask, session: URLSession) {
-        orig.URLSession(session, dataTask: task, didReceiveData: data)
-    }
-
-    // orion:new
     func handleBlockedEndpoint(_ url: URL, task: URLSessionDataTask, session: URLSession) {
-        if url.isDeleteToken {
+        if url.isDeleteToken || url.isAdRelated || isAdDeliveryURL(url) {
+            // Ad requests and token deletion: return empty response
             respondWithCustomData(Data(), task: task, session: session)
         } else if url.isAccountValidate {
             let response = "{\"status\":1,\"country\":\"US\",\"is_country_launched\":true}".data(using: .utf8)!
@@ -452,7 +466,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         } else if url.path.contains("bootstrap/v1/bootstrap") {
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
         } else {
-            // All ad-related and unknown blocked URLs → empty response
             respondWithCustomData(Data(), task: task, session: session)
         }
         orig.URLSession(session, task: task, didCompleteWithError: nil)
@@ -475,23 +488,19 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, task: task, didCompleteWithError: error)
             return
         }
-
         // Handle blocked endpoints (session protection + ad blocking)
         if shouldBlock(url) {
             handleBlockedEndpoint(url, task: task, session: session)
             return
         }
-
         // Handle customize 304 that was already served in didReceiveResponse
         if SPTDataLoaderServiceHook.handledCustomizeTasks.remove(task.taskIdentifier) != nil {
             orig.URLSession(session, task: task, didCompleteWithError: nil)
             return
         }
-
-        // ── HUB JSON AD STRIPPING (legacy JSON hub pages) ────────────────────────
-        // For Spotify 9.1.32, Casita/Browsita responses are protobuf and handled
-        // by AdViewBlocker.x.swift at the view layer. This handles any remaining
-        // JSON-based hub responses.
+        // ── HUB JSON AD STRIPPING ────────────────────────────────────────────────
+        // Strips ad components from JSON hub responses (HUBViewModelBuilderImplementation
+        // also does this, but this is a belt-and-suspenders network-level pass).
         if error == nil,
            BasePremiumPatchingGroup.isActive,
            isHubResponseURL(url),
@@ -502,7 +511,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
         // ─────────────────────────────────────────────────────────────────────────
-
         guard error == nil, shouldModify(url) else {
             orig.URLSession(session, task: task, didCompleteWithError: error)
             return
@@ -528,11 +536,9 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 
                 DispatchQueue.global(qos: .userInitiated).async {
                     do {
-                        customLyricsData = try getLyricsDataForCurrentTrack(
-                            url.path,
-                            originalLyrics: originalLyrics
-                        )
+                        customLyricsData = try getLyricsData(originalLyrics: originalLyrics, url: url)
                     } catch {
+                        // Fall through to original data
                     }
                     semaphore.signal()
                 }
@@ -588,7 +594,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, task: task, didCompleteWithError: error)
         }
     }
-
     func URLSession(
         _ session: URLSession,
         dataTask task: URLSessionDataTask,
@@ -600,7 +605,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             handler(.cancel)
             return
         }
-
         // Handle customize 304 — prevent free-account data leaking from URLSession cache
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304 {
             if let cached = SPTDataLoaderServiceHook.cachedCustomizeData {
@@ -611,7 +615,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 return
             }
         }
-
         guard
             let url = task.currentRequest?.url,
             url.isLyrics,
@@ -620,7 +623,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
             return
         }
-
         do {
             let data = try getLyricsDataForCurrentTrack(url.path)
             let okResponse = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:])!
@@ -631,7 +633,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             orig.URLSession(session, task: task, didCompleteWithError: error)
         }
     }
-
     func URLSession(
         _ session: URLSession,
         dataTask task: URLSessionDataTask,
@@ -640,23 +641,19 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         guard let url = task.currentRequest?.url else {
             return
         }
-
         // Suppress data for blocked endpoints (prevent original data from reaching handler)
         if shouldBlock(url) {
             return
         }
-
         // Buffer hub responses so we can strip ads in didCompleteWithError
         if BasePremiumPatchingGroup.isActive && isHubResponseURL(url) {
             URLSessionHelper.shared.setOrAppend(data, for: url)
             return
         }
-
         if shouldModify(url) {
             URLSessionHelper.shared.setOrAppend(data, for: url)
             return
         }
-
         orig.URLSession(session, dataTask: task, didReceiveData: data)
     }
 }
