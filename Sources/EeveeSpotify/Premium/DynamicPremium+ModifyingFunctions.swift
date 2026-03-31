@@ -221,6 +221,15 @@ private let propertyReplacements = [
     EeveePropertyReplacement(scope: "ios-feature-adsidentitytracking", modification: .remove),
 
     // ─────────────────────────────────────────────────────────────────────
+    // Search page ads & promotions
+    // ─────────────────────────────────────────────────────────────────────
+    EeveePropertyReplacement(name: "prompted_playlist_merchandizing_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "social_proof_playlist_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "social_proof_plays_in_search_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "video_carousel_section_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "watch_feed_section_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+
+    // ─────────────────────────────────────────────────────────────────────
     // Additional legacy / non-scoped ad flags
     // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(name: "enable_popups", modification: .setBool(false)),
