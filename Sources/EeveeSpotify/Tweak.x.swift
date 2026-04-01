@@ -146,6 +146,7 @@ struct EeveeSpotify: Tweak {
             
             // Always activate ad blocking regardless of patch type
             AdBlockerGroup().activate()
+            DACAdBlockerGroup().activate()
             
             // Premium patching
             if UserDefaults.patchType.isPatching {
@@ -177,6 +178,7 @@ struct EeveeSpotify: Tweak {
         
         // Always activate ad blocking regardless of patch type
         AdBlockerGroup().activate()
+        DACAdBlockerGroup().activate()
         
         if UserDefaults.patchType.isPatching {
             activatePremiumPatchingGroup()
