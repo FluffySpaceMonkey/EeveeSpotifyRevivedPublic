@@ -106,7 +106,9 @@ extension URL {
            path.contains("/ad-card/") ||
            path.contains("/sponsored-content/") ||
            path.contains("/sponsored-ad/") ||
-           path.contains("/native-ad/") {
+           path.contains("/native-ad/") ||
+           path.contains("/dac/view/v1/home-ads") ||
+           path.contains("/dac/view/v1/search-ads") {
             return true
         }
         

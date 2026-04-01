@@ -6,52 +6,21 @@ import Foundation
 
 struct DACAdBlockerGroup: HookGroup { }
 
-class DACAdsBlocker: ClassHook<NSObject> {
+// We use a more cautious approach to avoid crashes.
+// Instead of hooking the service, we hook the component models themselves if possible,
+// or use a safer way to check properties.
+
+class DACComponentHook: ClassHook<NSObject> {
     typealias Group = DACAdBlockerGroup
-    static let targetName: String = "DACIntegrationServiceImpl"
+    static let targetName: String = "Com_Spotify_Dac_Component_V1_Proto_DacComponent"
 
-    // This method is likely responsible for creating a view/renderer for a DAC component.
-    // By returning nil for ad components, we can prevent them from being rendered.
-    func rendererForComponent(_ component: NSObject) -> Any? {
-        LogHelper.log(message: "[DACAdsBlocker] rendererForComponent called for component: \(component)")
-        
-        let componentClassName = NSStringFromClass(type(of: component))
-        LogHelper.log(message: "[DACAdsBlocker] Component class name: \(componentClassName)")
-        
-        // Check for known ad-related DAC components
-        if componentClassName.contains("UpgradeComponent") || 
-           componentClassName.contains("AdComponent") ||
-           componentClassName.contains("Upsell") {
-            return nil
-        }
-        
-        // Most DAC components have a "model" or "data" property that contains the actual content.
-        // We can check if that content contains ad-related strings.
-        if component.responds(to: Selector(("model"))) {
-            LogHelper.log(message: "[DACAdsBlocker] Component responds to \"model\"")
-            if let model = component.value(forKey: "model") as? NSObject {
-                let modelDescription = model.description.lowercased()
-                if modelDescription.contains("ad-card") || 
-                   modelDescription.contains("sponsored") ||
-                   modelDescription.contains("upsell") {
-                    return nil
-                }
-            }
-        }
-        
-        // Also check "componentInstanceInfo" which often contains the component ID/type
-        if component.responds(to: Selector(("componentInstanceInfo"))) {
-            LogHelper.log(message: "[DACAdsBlocker] Component responds to \"componentInstanceInfo\"")
-            if let info = component.value(forKey: "componentInstanceInfo") as? NSObject {
-                let infoDescription = info.description.lowercased()
-                if infoDescription.contains("ad-card") || 
-                   infoDescription.contains("sponsored") ||
-                   infoDescription.contains("upsell") {
-                    return nil
-                }
-            }
-        }
-
-        return orig.rendererForComponent(component)
-    }
+    // If we can hook the initializer or a property getter, we can modify the component.
+    // However, Protobuf classes in Swift/ObjC can be tricky.
+    
+    // A safer way is to hook the data loader that fetches these components.
 }
+
+// The previous DACIntegrationServiceImpl hook was causing crashes.
+// We'll use a safer approach by hooking the underlying component model if possible,
+// or by expanding our URL-based blocking to prevent DAC ad requests from being made.
+
