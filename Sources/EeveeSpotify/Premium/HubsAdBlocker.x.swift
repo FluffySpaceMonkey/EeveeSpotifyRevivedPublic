@@ -37,7 +37,8 @@ class HubsAdBlocker: ClassHook<NSObject> {
         "mobile-ads", "on-surface", "onsurface", "search-ad", "home-ad",
         "sponsored-content", "sponsored-ad", "display-ad", "ad-card",
         "native-ad-home-shelf", "sponsored-shelf", "sponsored-row",
-        "ad-shelf", "ad-row", "sponsored-item", "ad-item"
+        "ad-shelf", "ad-row", "sponsored-item", "ad-item",
+        "merchandising", "upgrade-component", "offer", "marketing"
     ]
 
     // Returns true if the given string contains any ad keyword

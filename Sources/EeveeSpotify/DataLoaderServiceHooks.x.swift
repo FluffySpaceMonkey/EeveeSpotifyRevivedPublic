@@ -20,9 +20,15 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
     // orion:new
     func shouldBlock(_ url: URL) -> Bool {
         let elapsed = Date().timeIntervalSince(tweakInitTime)
+        let path = url.path.lowercased()
         
         // Always block explicit session destroy/token delete or ad-related requests
-        if url.isDeleteToken || url.isSessionInvalidation || url.path.contains("session/purge") || url.path.contains("token/revoke") || url.isAdRelated {
+        if url.isDeleteToken || url.isSessionInvalidation || path.contains("session/purge") || path.contains("token/revoke") || url.isAdRelated {
+            return true
+        }
+        
+        // Block DAC ad requests
+        if path.contains("/dac/view/v1/") && (path.contains("home-ads") || path.contains("search-ads")) {
             return true
         }
 
@@ -43,9 +49,11 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         let shouldReplaceLyrics = BaseLyricsGroup.isActive
         
         let isLyricsURL = url.isLyrics
+        let path = url.path.lowercased()
+        let isDAC = path.contains("/dac/view/v1/")
         
         return (shouldReplaceLyrics && isLyricsURL)
-            || (shouldPatchPremium && (url.isCustomize || url.isPremiumPlanRow || url.isPremiumBadge || url.isPlanOverview))
+            || (shouldPatchPremium && (url.isCustomize || url.isPremiumPlanRow || url.isPremiumBadge || url.isPlanOverview || isDAC))
     }
     
     // orion:new
@@ -195,6 +203,15 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             
             if url.isPlanOverview {
                 respondWithCustomData(try getPlanOverviewData(), task: task, session: session)
+                orig.URLSession(session, task: task, didCompleteWithError: nil)
+                return
+            }
+
+            if url.path.lowercased().contains("/dac/view/v1/") {
+                // For DAC responses, we return an empty valid response to hide ads/upsells
+                // Most DAC endpoints expect a protobuf or JSON response.
+                // Returning empty data or a minimal valid object is safer than blocking.
+                respondWithCustomData(Data(), task: task, session: session)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
