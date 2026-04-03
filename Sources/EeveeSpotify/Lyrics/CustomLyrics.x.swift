@@ -48,7 +48,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             
             if currentId == trackId {
                 currentTitle = track.trackTitle()
-                    currentArtist = track.responds(to: Selector(("artistTitle"))) ? track.artistTitle() : track.artistName()
+                currentArtist = track.artistName()
                 hasMetadata = true
                 
                 // Cache it
@@ -145,7 +145,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     
     let trackTitle = track.trackTitle()
     let artistName = EeveeSpotify.hookTarget == .lastAvailableiOS14
-        ? (track.responds(to: Selector(("artistTitle"))) ? track.artistTitle() : track.artistName())
+        ? track.artistName()
         : track.artistName()
     
     
