@@ -82,6 +82,17 @@ extension URL {
             return true
         }
         
+        // Block DAC (Display Ad Container) — delivers search-page and home-page display ads
+        // (Cartier on Search, Ross on Home as shown in the screenshots)
+        if path.contains("/dac/view/v1/") {
+            return true
+        }
+        
+        // Block Esperanto ad slot service (in-stream and overlay ads)
+        if path.contains("/esperanto/") && (path.contains("ad") || path.contains("slot")) {
+            return true
+        }
+        
         // Block other known ad paths
         if path.contains("/ad-slot/") ||
            path.contains("/ad-inventory/") ||

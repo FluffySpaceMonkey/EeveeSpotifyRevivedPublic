@@ -173,21 +173,48 @@ private let propertyReplacements = [
     // Ad on App Open — the "Advertisement" home-screen banner (Pepsi, etc.)
     // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "ios-ad-on-app-open", modification: .remove),
+    // The modern RemoteConfig scope for AdOnAppOpen (confirmed in binary).
+    // This is the scope that the AuthFetcher re-fetches after minimumFetchIntervalSeconds
+    // (typically a few hours), causing ads to reappear. Removing this scope prevents
+    // the AdOnAppOpenServiceImpl from enabling the ad on subsequent re-fetches.
+    EeveePropertyReplacement(scope: "ios-feature-adonappopen", modification: .remove),
+    // Explicitly disable the individual flags within ios-feature-adonappopen scope
+    // to ensure they are disabled even if the scope removal is not effective.
+    EeveePropertyReplacement(name: "enabled", scope: "ios-feature-adonappopen", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "background_refresh_frequency_seconds", scope: "ios-feature-adonappopen", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "is_ad_on_app_open_enabled", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "ad_on_app_open_enabled", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "adonappopen_enabled", modification: .setBool(false)),
 
     // ─────────────────────────────────────────────────────────────────────
     // Marquee — full-screen artist/brand ad overlay
     // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "marquee", modification: .remove),
+    // Modern RemoteConfig scope for Marquee (confirmed in binary as 'ios-feature-marquee').
+    EeveePropertyReplacement(scope: "ios-feature-marquee", modification: .remove),
 
     // ─────────────────────────────────────────────────────────────────────
     // Leave Behind ads — shown when leaving Now Playing
     // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "leavebehindadsbase", modification: .remove),
+    // Modern RemoteConfig scope for Leave Behind ads (confirmed in binary as 'ios-feature-leavebehindadsbase').
+    EeveePropertyReplacement(scope: "ios-feature-leavebehindadsbase", modification: .remove),
 
     // ─────────────────────────────────────────────────────────────────────
     // In-stream / audio / video stream ads
     // ─────────────────────────────────────────────────────────────────────
     EeveePropertyReplacement(scope: "ios-feature-instreamads", modification: .remove),
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Embedded ad CTA elements — search-page and home-page display ads
+    // These scopes are responsible for the 'Advertisement' banners shown
+    // in the screenshots (Cartier on Search, Ross on Home).
+    // Confirmed scope names from binary analysis of the decrypted IPA.
+    // ─────────────────────────────────────────────────────────────────────
+    EeveePropertyReplacement(scope: "ios-adsembedded-embeddedctaelements-impl", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-adsnowplaying-embeddednpv-impl", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-adsplatform-elementimpl", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-system-adssponsoredcontext", modification: .remove),
 
     // ─────────────────────────────────────────────────────────────────────
     // Ads base infrastructure
