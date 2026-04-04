@@ -27,8 +27,16 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return true
         }
         
-        // Block DAC ad requests
-        if path.contains("/dac/view/v1/") && (path.contains("home-ads") || path.contains("search-ads")) {
+        // Block all DAC (Display Ad Container) ad requests.
+        // The DAC endpoint delivers the search-page and home-page display ads
+        // (e.g. Cartier on Search, Ross on Home shown in the screenshots).
+        // Any /dac/view/v1/ request is ad-related; return empty to suppress.
+        if path.contains("/dac/view/v1/") {
+            return true
+        }
+
+        // Block the Esperanto ad slot service used for in-stream and overlay ads
+        if path.contains("/esperanto/") && (path.contains("ad") || path.contains("slot")) {
             return true
         }
 
@@ -38,6 +46,12 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 || url.isTrialsFacade || url.isPremiumMarketing || url.isPendragonFetchMessageList
                 || url.isPushkaTokens || url.path.contains("signup/public") || url.path.contains("apresolve")
                 || url.path.contains("pses/screenconfig") || url.path.contains("bootstrap/v1/bootstrap")
+                // Block periodic customize re-fetches (RemoteConfigurationSDK AuthFetcher).
+                // The AuthFetcher re-fetches v1/customize after minimumFetchIntervalSeconds
+                // (typically a few hours). If this re-fetch is not intercepted and modified,
+                // the app re-enables ad feature flags from the server response.
+                // We block re-fetches here; the cached modified data is served via the 304 path.
+                || url.path.contains("v1/customize")
         }
         
         return false
@@ -92,6 +106,19 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             respondWithCustomData("{}".data(using: .utf8)!, task: task, session: session)
         } else if url.isAdRelated {
             respondWithCustomData(Data(), task: task, session: session)
+        } else if url.path.lowercased().contains("/dac/view/v1/") {
+            // Return empty data for DAC ad requests
+            respondWithCustomData(Data(), task: task, session: session)
+        } else if url.path.lowercased().contains("/esperanto/") {
+            // Return empty data for Esperanto ad slot requests
+            respondWithCustomData(Data(), task: task, session: session)
+        } else if url.path.contains("v1/customize") {
+            // Serve the cached modified customize data for periodic re-fetches
+            if let cached = SPTDataLoaderServiceHook.cachedCustomizeData {
+                respondWithCustomData(cached, task: task, session: session)
+            } else {
+                respondWithCustomData(Data(), task: task, session: session)
+            }
         }
         orig.URLSession(session, task: task, didCompleteWithError: nil)
     }
