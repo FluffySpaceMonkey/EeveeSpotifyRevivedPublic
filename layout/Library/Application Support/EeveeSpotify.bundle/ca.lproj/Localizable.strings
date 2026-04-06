@@ -131,3 +131,25 @@ request_anonymous_token = "Sol·licita un token anònim";
 request_anonymous_token_description = "Pitja a «Sol·licita un token anònim» per sol·licitar un token des de Musixmatch sense autorització.";
 
 lrclib_api = "Adreça del servidor de LRCLib";
+
+
+// Snapshot of your benefits, should match official spotify loc
+
+ad_free_music_listening = "Escoltà música sense anuncis";
+play_songs_in_any_order = "Reprodueix cançons en qualsevol ordre";
+organize_listening_queue = "Organitza la cua de reproducció";
+
+payment_notice = "L'EeveeSpotify aplica modificacions per desbloquejar certes funcions Premium. És gratuït.";
+
+
+// Debug
+
+debug_title = "Depuració";
+export_debug_log = "Exporta l'arxiu de depuració";
+clear_debug_log = "Neteja l'arxiu de depuració";
+debug_log_cleared = "Arxiu de depuració netejat.";
+debug_log_cleared_ok = "D'acord";
+no_debug_log_found = "No s'ha trobat l'arxiu de depuració. El registre comença a gravar-se quan s'inicia l'aplicació.";
+no_debug_log_found_ok = "D'acord";
+debug_section_footer = "Exporta o neteja l'arxiu de depuració.";
+

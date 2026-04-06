@@ -142,3 +142,14 @@ play_songs_in_any_order = "Play songs in any order";
 organize_listening_queue = "Organize listening queue";
 
 payment_notice = "EeveeSpotify applies patches to unlock certain Premium features. It's free.";
+
+// Debug
+
+debug_title = "Debug";
+export_debug_log = "Export Debug Log";
+clear_debug_log = "Clear Debug Log";
+debug_log_cleared = "Debug log cleared.";
+debug_log_cleared_ok = "OK";
+no_debug_log_found = "No debug log found. The log starts recording when the app launches.";
+no_debug_log_found_ok = "OK";
+debug_section_footer = "Export or clear the debug log.";

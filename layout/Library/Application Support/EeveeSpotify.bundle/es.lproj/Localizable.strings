@@ -139,3 +139,15 @@ play_songs_in_any_order = "Reproducir canciones en cualquier orden";
 organize_listening_queue = "Organizar la cola de reproducción";
 
 payment_notice = "EeveeSpotify aplica modificaciones para desbloquear ciertas funciones Premium. Es gratis.";
+
+
+// Debug
+
+debug_title = "Depuración";
+export_debug_log = "Exportar archivo de depuración";
+clear_debug_log = "Limpiar archivo de depuración ";
+debug_log_cleared = "Archivo de depuración limpiado.";
+debug_log_cleared_ok = "Vale";
+no_debug_log_found = "No se encontró archivo de depuración. El registro comienza a grabarse cuando se inicia la aplicación.";
+no_debug_log_found_ok = "Vale";
+debug_section_footer = "Exportar o limpiar el archivo de depuración.";
