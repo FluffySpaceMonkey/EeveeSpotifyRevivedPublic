@@ -2,7 +2,7 @@
 
 # EeveeSpotify
 
-**Updated and maintained by Skye and jaydenjcpy - Current Version 9.1.32**
+**Updated and maintained by Skye and jaydenjcpy - Current Version 9.1.34**
 
 **Last updated 4/07/26**
 
