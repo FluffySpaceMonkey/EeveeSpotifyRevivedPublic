@@ -2,9 +2,9 @@
 
 # EeveeSpotify
 
-**Updated and maintained by Skye - Current Version 9.1.28**
+**Updated and maintained by Skye and jaydenjcpy - Current Version 9.1.34**
 
-**Last updated 3/12/26**
+**Last updated 4/07/26**
 
 This tweak makes Spotify think you have a Premium subscription, granting free listening, just like Spotilife, and provides some additional features like custom lyrics.
 
@@ -82,7 +82,7 @@ For sideloaded IPAs, we recommend using **Sideloadly** or certificate-based sign
 
 To open Spotify links in sideloaded app, use [OpenSpotifySafariExtension](https://github.com/BillyCurtis/OpenSpotifySafariExtension). Remember to activate it and allow access in Settings > Safari > Extensions.
 
-## Donations
+## Donations to Meep1
 
 USDC (ETH)
 
